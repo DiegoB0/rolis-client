@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { Button, Input } from '@nextui-org/react';
 import {
 	Dialog,
 	DialogContent,
@@ -8,7 +8,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+// import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
 	Select,
@@ -18,12 +18,14 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select';
-import React, { useState } from 'react';
+import { useAuthStore } from '@/store/auth';
+import React, { useEffect, useState } from 'react';
 import { FaRegFileExcel } from 'react-icons/fa';
 import { FiPlusCircle } from 'react-icons/fi';
 import { MdDeleteOutline } from 'react-icons/md';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import KeyboardBackspaceRoundedIcon from '@mui/icons-material/KeyboardBackspaceRounded';
 
 interface ExcelRow {
 	[key: string]: string | number | boolean | Date;
@@ -34,6 +36,47 @@ function ExcelSheetsNew() {
 	const [columnNames, setColumnNames] = useState<string[]>([]);
 	const [fileName, setFileName] = useState<string>('');
 	const navigation = useNavigate();
+	const user_id = useAuthStore(state => state.profile);
+	const location = useLocation();
+    const file = location.state?.file;
+
+	console.log(file)
+
+	useEffect(() => {
+		if (file && file.url) {
+			// Crear una instancia de XMLHttpRequest para descargar el archivo
+			const xhr = new XMLHttpRequest();
+			xhr.open('GET', file.url, true);
+			xhr.responseType = 'blob'; // Establecer el tipo de respuesta a 'blob' para recibir un archivo
+	
+	
+			xhr.onload = function() {
+				if (this.status === 200) {
+					// Si la descarga fue exitosa, obtener el archivo como Blob
+					const blob = this.response;
+					const reader = new FileReader();
+					reader.onload = function() {
+						// Una vez que el archivo se haya leído como texto, procesarlo con XLSX
+						const data = reader.result;
+						const workbook = XLSX.read(data, { type: 'binary' });
+						const sheetName = workbook.SheetNames[0];
+						const sheet = workbook.Sheets[sheetName];
+						const parseData = XLSX.utils.sheet_to_json<ExcelRow>(sheet);
+						const columnNames = Object.keys(parseData[0]);
+						setColumnNames(columnNames);
+						setData(parseData);
+						setFileName(file.filename);
+					};
+					// Leer el archivo como texto binario
+					reader.readAsBinaryString(blob);
+				}
+			};
+	
+			// Enviar la solicitud para descargar el archivo
+			xhr.send();
+		}
+	}, [file]);
+	
 
 	const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 		if (e.target.files && e.target.files.length > 0) {
@@ -105,6 +148,7 @@ function ExcelSheetsNew() {
 		});
 		const formData = new FormData();
 		formData.append('uploadfile', blob, `${fileName}.xlsx`);
+		formData.append("userId", user_id.username.userId);
 
 		// Send the Excel file to the API
 		fetch('http://localhost:5000/uploadExcelFile', {
@@ -176,27 +220,53 @@ function ExcelSheetsNew() {
 	};
 
 	return (
-		<div className="text-2xl text-custom-light md:p-8 p-6">
-			<h1>Excel Sheets</h1>
-			<input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} />
+		<div className="text-2xl text-custom-light md:p-8 p-6 ">
+			<div className='bg-red-300 -ml-8 -mr-8 px-10 -mt-8 p-5'>
+				<div className='flex flex-row items-center cursor-pointer w-fit' onClick={() => navigation("/")}>
+					<KeyboardBackspaceRoundedIcon className='text-white mt-1'/>
+					<p className='text-white ml-2 text-xl'>Atras</p>
+				</div>
+				<h1 className='text-4xl font-bold mb-3 text-white text-center'>Excel Sheets</h1>
+				<input
+					id="fileInputUser"
+					type="file"
+					accept=".xlsx, .xls"
+					onChange={handleFileUpload}
+					style={{ display: 'none' }} // Mantén el input oculto
+				/>
+				<label htmlFor="fileInputUser" className="justify-center flex">
+					<p className=' text-white bg-green-500 text-[20px] rounded-xl cursor-pointer p-2 hover:bg-green-600'>
+						Seleccionar archivo Excel
+					</p>
+				</label>
+
+
+			</div>
 
 			{data.length > 0 && (
 				<>
 					<div className="flex justify-between gap-2 bg-base-800 p-4 rounded-lg">
-						<input
-							type="text"
-							value={fileName}
-							onChange={(e) => setFileName(e.target.value)}
-							placeholder="Escribe el titulo del excel"
-							className="bg-base-900 rounded-xl text-lg h-10 p-4"
-						/>
+						<div className='w-full flex flex-row'>
+							<Input
+								//@ts-ignore
+								clearable
+								bordered
+								color="default"
+								value={fileName}
+								onChange={(e) => setFileName(e.target.value)}
+								placeholder="Escribe el titulo del excel"
+								style={{ fontSize: '18px' }}
+								className='w-1/5 mr-10'
+							/>
+							<Button color='primary' className='w-48' onClick={saveExcel}>Guardar</Button>
+						</div>
 						<div className=" flex gap-4">
-							<div className="border-custom-gray flex gap-1 border-2 rounded-lg px-2 text-lg items-center hover:bg-custom-gray transition-all duration-200 py-1">
+							<div className="border-custom-gray flex gap-1 border-2 rounded-lg px-2 text-lg items-center hover:bg-red-500 hover:text-white transition-all duration-200 py-1">
 								<MdDeleteOutline />
 								<button onClick={handleDelete}>Eliminar</button>
 							</div>
 
-							<div className="bg-accent-green flex px-2 py-1 border-custom-mate border-2 rounded-lg  gap-1 text-lg items-center hover:bg-emerald-700 transition-all duration-200">
+							<div className="bg-accent-green flex px-2 py-1 border-custom-mate border-2 rounded-lg  gap-1 text-lg items-center hover:bg-emerald-700 hover:text-white transition-all duration-200">
 								<FaRegFileExcel />
 								<button onClick={exportToExcel}>Exportar</button>
 							</div>
@@ -204,8 +274,8 @@ function ExcelSheetsNew() {
 							<Dialog>
 								<DialogTrigger asChild>
 									<Button
-										variant="outline"
-										className="bg-accent-yellow flex px-4 py-5 border-custom-mate border-2 rounded-lg  gap-1 text-lg items-center hover:bg-yellow-600 transition-all duration-200"
+										// variant="outline"
+										className="bg-accent-yellow flex px-4 py-5 border-custom-mate border-2 rounded-lg  gap-1 text-lg items-center hover:bg-yellow-600 hover:text-white transition-all duration-200"
 									>
 										<span>
 											<FiPlusCircle />
@@ -255,7 +325,7 @@ function ExcelSheetsNew() {
 									</DialogFooter>
 								</DialogContent>
 							</Dialog>
-						</div>
+							</div>
 					</div>
 
 					<div className=" border-b-2 border-r-2 border-l-2 rounded p-2">
@@ -310,8 +380,9 @@ function ExcelSheetsNew() {
 						</table>
 					</div>
 					<Button
-						className="w-full font-bold text-lg hover:bg-base-900 border-2 border-base-800 hover:border-custom-gray"
+						className="w-full font-bold text-lg mt-5"
 						onClick={saveExcel}
+						color='primary'
 					>
 						Guardar
 					</Button>
